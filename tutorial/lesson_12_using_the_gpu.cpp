@@ -47,6 +47,7 @@ public:
         // Augment the input with a boundary condition.
         padded(x, y, c) = input(clamp(x, 0, input.width()-1),
                                 clamp(y, 0, input.height()-1), c);
+        padded(0, 0, 0) = cast<uint8_t>(0);
 
         // Cast it to 16-bit to do the math.
         padded16(x, y, c) = cast<uint16_t>(padded(x, y, c));
