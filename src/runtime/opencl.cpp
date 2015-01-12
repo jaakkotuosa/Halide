@@ -52,7 +52,7 @@ WEAK void halide_set_cl_context(cl_context* ctx_ptr, cl_command_queue* q_ptr, vo
 // - A call to halide_acquire_cl_context is followed by a matching call to
 //   halide_release_cl_context. halide_acquire_cl_context should block while a
 //   previous call (if any) has not yet been released via halide_release_cl_context.
-WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_command_queue *q) {
+WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_command_queue *q, bool *auto_finish_ptr) {
     // TODO: Should we use a more "assertive" assert? These asserts do
     // not block execution on failure.
     halide_assert(user_context, ctx != NULL);
@@ -81,6 +81,8 @@ WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_comma
 
     *ctx = *cl_ctx_ptr;
     *q = *cl_q_ptr;
+    *auto_finish_ptr = true;
+
     return 0;
 }
 
@@ -101,13 +103,15 @@ public:
     cl_context context;
     cl_command_queue cmd_queue;
     cl_int error;
+    bool auto_finish;
 
     // Constructor sets 'error' if any occurs.
     ClContext(void *user_context) : user_context(user_context),
                                     context(NULL),
                                     cmd_queue(NULL),
-                                    error(CL_SUCCESS) {
-        error = halide_acquire_cl_context(user_context, &context, &cmd_queue);
+                                    error(CL_SUCCESS),
+                                    auto_finish(true) {
+        error = halide_acquire_cl_context(user_context, &context, &cmd_queue, &auto_finish);
         halide_assert(user_context, context != NULL && cmd_queue != NULL);
     }
 
@@ -539,11 +543,13 @@ WEAK void halide_release(void *user_context) {
     int err;
     cl_context ctx;
     cl_command_queue q;
-    err = halide_acquire_cl_context(user_context, &ctx, &q);
+    bool auto_finish;
+    err = halide_acquire_cl_context(user_context, &ctx, &q, &auto_finish);
     if (err != 0 || !ctx) {
         return;
     }
 
+    // ignore auto_finish here
     err = clFinish(q);
     halide_assert(user_context, err == CL_SUCCESS);
 
@@ -718,7 +724,9 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
         // The writes above are all non-blocking, so empty the command
         // queue before we proceed so that other host code won't write
         // to the buffer while the above writes are still running.
-        clFinish(ctx.cmd_queue);
+        if (ctx.auto_finish) {
+            clFinish(ctx.cmd_queue);
+        }
 
         #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
@@ -816,7 +824,9 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
         // The writes above are all non-blocking, so empty the command
         // queue before we proceed so that other host code won't read
         // bad data.
-        clFinish(ctx.cmd_queue);
+        if (ctx.auto_finish) {
+            clFinish(ctx.cmd_queue);
+        }
 
         #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
