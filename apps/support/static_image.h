@@ -127,16 +127,16 @@ public:
         contents->buf.host_dirty = dirty;
     }
 
-    void copy_to_host() {
+    void copy_to_host(void* user_context = NULL) {
         if (contents->buf.dev_dirty) {
-            halide_copy_to_host(NULL, &contents->buf);
+            halide_copy_to_host(user_context, &contents->buf);
             contents->buf.dev_dirty = false;
         }
     }
 
-    void copy_to_dev() {
+    void copy_to_dev(void* user_context = NULL) {
         if (contents->buf.host_dirty) {
-            halide_copy_to_dev(NULL, &contents->buf);
+            halide_copy_to_dev(user_context, &contents->buf);
             contents->buf.host_dirty = false;
         }
     }
